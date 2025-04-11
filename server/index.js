@@ -18,7 +18,7 @@ const db=mysql.createConnection(
     host:"localhost",
     user:"root",
     password:"1234",
-    database:"SHOWCAR"
+    database:"pwii"
 }
 )
 
@@ -57,13 +57,13 @@ app.post("/create",archivo.single('imagen'), (req, resp) => {
         (err, data) => {
             if (err) {
                 console.log(err);
-                resp.status(500).json({ message: "Error al insertar en la base de datos", error: err });
+                resp.json({ message: "Error al insertar en la base de datos", error: err });
             } else {
                 resp.json(
                    {"msg":"ok"}
                 )
                 console.log("info insertada");
-                resp.status(200).json({ message: "Usuario creado con éxito" });
+                //resp.json({ message: "Usuario creado con éxito" });
             }
         }
     );
@@ -99,7 +99,7 @@ app.post("/Login",
 
 app.get("/getUsers",
     (req,resp)=>{
-        db.query("SELECT nombre, foto_perfil FROM tabla_usuario",
+        db.query("SELECT nombre, foto, id FROM usuario",
             (err,data)=>{
                 if(err){
                     resp.json({
@@ -116,3 +116,39 @@ app.get("/getUsers",
             }
         )
     })
+
+ app.put("/modificar/:usuario",
+    (req,resp)=>{
+        const nuevoNom=req.body.newNom;
+        const newCorr=req.body.newEmail;
+        const usModificar=reqparams.usuario;
+
+        db.query('UPDATE usuario set nombre=?, correo=? where id=?',
+            [nuevoNom,newCorr,usModificar],
+            (err,res)=>{
+                if(err){
+                    resp.json({status:"error"})
+                }else{
+                    resp.json({status:"ok"})
+                }
+            }
+        )
+    }
+ )   
+
+ app.delete("/eliminar/:id",
+    (req,resp)=>{
+
+        db.query('DELETE FROM usuario where id=?',
+            req.params.id,
+            (err,res)=>{
+                if(err){
+                    console.log(err);
+                    resp.json({status:"error"})
+                }else{
+                    resp.json({status:"eliminado"})
+                }
+            }
+        )
+    }
+ )  

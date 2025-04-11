@@ -6,6 +6,21 @@ import axios from 'axios';
 
 
 function Landing(){
+
+  const validarPassword=()=> {
+    var password = document.getElementById("password").value;
+    var errorMensaje = document.getElementById("errorMensaje");
+    var regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+
+    if (!regex.test(password)) {
+        errorMensaje.textContent = "La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.";
+        return false;
+    }
+
+    errorMensaje.textContent = "";
+    return true;
+}
+
   const [isLogin, setIsLogin] = useState(true);
 
   const handleToggleForm = () => {
