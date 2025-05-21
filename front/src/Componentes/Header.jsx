@@ -72,14 +72,15 @@ function Header() {
 
                             {usuario.tipoUsuario === 1 && (
                                 <>
-                                    <li>
-                                        <Link to="/Catalogousuario" className="text-lg hover:bg-purple-600 rounded px-3 py-2 transition">
-                                            Catálogo
-                                        </Link>
-                                    </li>
+                                    
                                     <li>
                                         <Link to="/Perfilcliente" className="text-lg hover:bg-purple-600 rounded px-3 py-2 transition">
                                             Perfil cliente
+                                        </Link>
+                                    </li>
+                                    <li>
+                                        <Link to="/Reportes" className="text-lg hover:bg-purple-600 rounded px-3 py-2 transition">
+                                            Reportes
                                         </Link>
                                     </li>
                                 </>

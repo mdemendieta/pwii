@@ -24,7 +24,7 @@ const dbPool = mysql.createPool({ // Changed to createPool and renamed to dbPool
 // Optional: Test connection on startup
 dbPool.getConnection()
     .then(connection => {
-        console.log("Successfully connected to the database using connection pool.");
+        console.log("-------------------------------------------------");
         connection.release();
     })
     .catch(err => {
@@ -646,7 +646,357 @@ app.delete("/api/auto/:autoId", async (req, resp) => {
     }
 });
 
+app.post("/api/venta", async (req, resp) => {
+    const {
+        id_usuario_comprador,
+        id_usuario_vendedor,
+        id_auto_venta,
+        metodo_pago_venta, // 1 para Crédito, 2 para Débito
+        Precio_pagado
+    } = req.body;
 
+    // Validación básica de datos
+    if (!id_usuario_comprador || !id_usuario_vendedor || !id_auto_venta || !metodo_pago_venta || Precio_pagado === undefined || Precio_pagado === null) {
+        return resp.status(400).json({ msg: "error", error: "Faltan datos obligatorios para registrar la venta." });
+    }
+    if (metodo_pago_venta !== 1 && metodo_pago_venta !== 2) {
+         return resp.status(400).json({ msg: "error", error: "Método de pago inválido. Use 1 para Crédito o 2 para Débito." });
+    }
+
+
+    const fecha_venta = new Date(); // Fecha actual para la venta
+    let connection;
+
+    try {
+        connection = await dbPool.getConnection();
+        await connection.beginTransaction();
+
+        // 1. Insertar en tabla_venta
+        const ventaInsertQuery = `
+            INSERT INTO tabla_venta 
+            (id_usuario_comprador, id_usuario_vendedor, id_auto_venta, fecha_venta, metodo_pago_venta, Precio_pagado) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        `;
+        const [ventaResult] = await connection.execute(ventaInsertQuery, [
+            id_usuario_comprador,
+            id_usuario_vendedor,
+            id_auto_venta,
+            fecha_venta,
+            metodo_pago_venta,
+            Precio_pagado
+        ]);
+
+        if (ventaResult.affectedRows === 0) {
+            throw new Error("No se pudo registrar la venta.");
+        }
+        const id_venta_nueva = ventaResult.insertId;
+
+
+        // 2. Actualizar tabla_auto para marcar el auto como vendido (Baja_carro = 1)
+        const autoUpdateQuery = `
+            UPDATE tabla_auto 
+            SET Baja_carro = 1 
+            WHERE id_auto = ? AND (Baja_carro = 0 OR Baja_carro IS NULL) 
+        `;
+        // Se agrega `AND (Baja_carro = 0 OR Baja_carro IS NULL)` para evitar "comprar" un auto ya vendido.
+        const [autoUpdateResult] = await connection.execute(autoUpdateQuery, [id_auto_venta]);
+
+        if (autoUpdateResult.affectedRows === 0) {
+            // Esto podría significar que el auto ya estaba vendido o no existía.
+            // La transacción se revierte para no dejar una venta registrada de un auto no disponible.
+            throw new Error("No se pudo actualizar el estado del auto (posiblemente ya no estaba disponible o no existe).");
+        }
+
+        await connection.commit();
+        resp.status(201).json({ msg: "ok", message: "Venta registrada y auto actualizado con éxito.", id_venta: id_venta_nueva });
+
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error("Error al registrar la venta:", error);
+        resp.status(500).json({ msg: "error", error: "Error interno del servidor al procesar la venta.", details: error.message });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post("/api/resena", async (req, resp) => {
+    const {
+        id_usuario_comprador,
+        id_usuario_vendedor,
+        texto_resena,
+        calificacion_vendedor
+        // autoId // Opcional, si decides añadirlo a tabla_resenas
+    } = req.body;
+
+    if (!id_usuario_comprador || !id_usuario_vendedor || !texto_resena || !calificacion_vendedor) {
+        return resp.status(400).json({ msg: "error", error: "Faltan datos obligatorios para la reseña." });
+    }
+
+    if (calificacion_vendedor < 1 || calificacion_vendedor > 5) {
+        return resp.status(400).json({ msg: "error", error: "La calificación debe estar entre 1 y 5." });
+    }
+
+    const fecha_actual = new Date();
+    // Formatear para SQL DATE y TIME. MySQL usualmente maneja objetos Date de JS bien para TIMESTAMP o DATETIME.
+    // Para columnas separadas DATE y TIME:
+    const fecha_creacion_sql = fecha_actual.toISOString().slice(0, 10); // YYYY-MM-DD
+    const hora_creacion_sql = fecha_actual.toTimeString().slice(0, 8);  // HH:MM:SS
+
+    try {
+        // Tu tabla_resenas tiene columnas Fecha_creacion_mensaje y Hora_creacion_mensaje
+        // Es mejor tener una sola columna DATETIME o TIMESTAMP, ej: fecha_creacion_resena
+        // Por ahora, usaré las columnas que definiste.
+        const insertQuery = `
+            INSERT INTO tabla_resenas 
+            (id_usuario_comprador, id_usuario_vendedor, texto_resena, calificacion_vendedor, Fecha_creacion_mensaje, Hora_creacion_mensaje) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        `;
+        
+        const [result] = await dbPool.execute(insertQuery, [
+            id_usuario_comprador,
+            id_usuario_vendedor,
+            texto_resena,
+            calificacion_vendedor,
+            fecha_creacion_sql, // O simplemente fecha_actual si tu columna es DATETIME/TIMESTAMP
+            hora_creacion_sql   // O simplemente fecha_actual si tu columna es DATETIME/TIMESTAMP
+        ]);
+
+        if (result.affectedRows === 1) {
+            resp.status(201).json({ msg: "ok", message: "Reseña guardada con éxito.", id_resena: result.insertId });
+        } else {
+            throw new Error("No se pudo guardar la reseña.");
+        }
+
+    } catch (error) {
+        console.error("Error al guardar reseña:", error);
+        resp.status(500).json({ msg: "error", error: "Error interno del servidor al guardar la reseña.", details: error.message });
+    }
+});
+
+app.put("/api/auto/:autoId", archivo.array('newImagenesUpload', 10), async (req, resp) => {
+    const { autoId } = req.params;
+    const {
+        modelo, // Espera 'modelo' del FormData
+        marca,  // Espera 'marca' del FormData
+        categoria: id_categoria, // Espera 'categoria' del FormData y lo renombra a id_categoria
+        color,
+        estadoAuto, // Condición
+        transmision,
+        estado, // Provincia
+        ciudad,
+        colonia,
+        calle,
+        kilometraje,
+        Anio_auto, // Espera 'Anio_auto' del FormData para el año (con 'i')
+        precio,
+        existingImageIds, // JSON string de IDs de imágenes existentes a conservar
+        id_usuario_editor // ID del usuario que intenta editar, enviado por el frontend
+    } = req.body;
+
+    console.log("Backend PUT /api/auto/:autoId - req.body:", req.body);
+    console.log("Backend PUT /api/auto/:autoId - req.files:", req.files ? req.files.length : 0, "new files");
+
+
+    if (!autoId || isNaN(parseInt(autoId))) {
+        return resp.status(400).json({ msg: "error", error: "ID de auto inválido." });
+    }
+    if (!id_usuario_editor || isNaN(parseInt(id_usuario_editor))) {
+        return resp.status(401).json({ msg: "error", error: "No autorizado: Usuario editor no identificado." });
+    }
+
+    // Validación de campos requeridos (ajusta según tu lógica)
+    const camposRequeridos = { modelo, marca, id_categoria, color, estadoAuto, transmision, estado, ciudad, kilometraje, Anio_auto, precio };
+    for (const campo in camposRequeridos) {
+        if (camposRequeridos[campo] === undefined || camposRequeridos[campo] === null || String(camposRequeridos[campo]).trim() === "") {
+             return resp.status(400).json({ msg: "error", error: `El campo '${campo === 'Anio_auto' ? 'Año' : campo}' es obligatorio y no puede estar vacío.` });
+        }
+    }
+
+    let connection;
+    try {
+        connection = await dbPool.getConnection();
+        await connection.beginTransaction();
+
+        // 1. Verificar que el auto existe y que el usuario es el propietario
+        const [autoActualResults] = await connection.execute(
+            "SELECT id_vendedor FROM tabla_auto WHERE id_auto = ? AND (Baja_carro = 0 OR Baja_carro IS NULL)",
+            [autoId]
+        );
+
+        if (autoActualResults.length === 0) {
+            await connection.rollback();
+            return resp.status(404).json({ msg: "error", error: "Auto no encontrado o ya fue dado de baja." });
+        }
+
+        const idVendedorDelAuto = autoActualResults[0].id_vendedor;
+        if (idVendedorDelAuto !== parseInt(id_usuario_editor)) {
+            await connection.rollback();
+            return resp.status(403).json({ msg: "error", error: "No tienes permiso para editar esta publicación." });
+        }
+
+        // 2. Actualizar los datos en tabla_auto
+        // La columna en la DB es Año_auto (con ñ), pero recibimos Anio_auto (con i)
+        const updateAutoQuery = `
+            UPDATE tabla_auto SET
+                Modelo_Auto = ?, Marca_auto = ?, id_categoria = ?, Color_auto = ?, Estado_auto = ?,
+                Transmision_auto = ?, Estado = ?, Ciudad = ?, Colonia = ?, Calle = ?,
+                Kilometraje_auto = ?, Año_auto = ?, Precio_auto = ? 
+            WHERE id_auto = ?
+        `;
+        await connection.execute(updateAutoQuery, [
+            modelo, marca, id_categoria, color, estadoAuto, // estadoAuto es Estado_auto en DB
+            transmision, estado, ciudad, colonia, calle,    // transmision es Transmision_auto en DB
+            kilometraje, Anio_auto, precio,                 // Anio_auto (con i) se inserta en Año_auto (con ñ)
+            autoId
+        ]);
+
+        // 3. Manejar imágenes
+        const [currentDbImages] = await connection.execute(
+            "SELECT id_foto FROM tabla_fotos WHERE id_auto = ?",
+            [autoId]
+        );
+        const currentDbImageIds = currentDbImages.map(img => img.id_foto);
+
+        let existingImageIdsToKeep = [];
+        if (existingImageIds) {
+            try {
+                existingImageIdsToKeep = JSON.parse(existingImageIds).map(id => parseInt(id, 10));
+            } catch (parseError) {
+                console.error("Error parseando existingImageIds:", parseError, "Valor recibido:", existingImageIds);
+                existingImageIdsToKeep = [...currentDbImageIds]; 
+            }
+        } else {
+            existingImageIdsToKeep = []; // Si no se envía, se asume que se quieren borrar todas las existentes (excepto las nuevas)
+        }
+        
+        const imageIdsToDelete = currentDbImageIds.filter(id => !existingImageIdsToKeep.includes(id));
+
+        if (imageIdsToDelete.length > 0) {
+            const deletePlaceholders = imageIdsToDelete.map(() => '?').join(',');
+            await connection.execute(
+                `DELETE FROM tabla_fotos WHERE id_foto IN (${deletePlaceholders}) AND id_auto = ?`,
+                [...imageIdsToDelete, autoId]
+            );
+            console.log(`Imágenes eliminadas para auto ${autoId}:`, imageIdsToDelete);
+        }
+
+        if (req.files && req.files.length > 0) {
+            const newFotosInsertPromises = req.files.map(file => {
+                const imagenBase64 = file.buffer.toString('base64');
+                const fotoInsertQuery = `INSERT INTO tabla_fotos (id_auto, contenido) VALUES (?, ?)`;
+                return connection.execute(fotoInsertQuery, [autoId, imagenBase64]);
+            });
+            await Promise.all(newFotosInsertPromises);
+            console.log(`${req.files.length} nuevas imágenes guardadas para auto ${autoId}`);
+        }
+
+        await connection.commit();
+        resp.status(200).json({ msg: "ok", message: "Publicación actualizada con éxito." });
+
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error(`Error al actualizar el auto ${autoId}:`, error);
+        resp.status(500).json({ msg: "error", error: "Error interno del servidor al actualizar la publicación.", details: error.message });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get("/api/vendedor/:vendedorId/ventas", async (req, resp) => {
+    const { vendedorId } = req.params;
+    // Opcional: Podrías añadir query params para filtros de fecha, etc.
+    // const { fechaInicio, fechaFin, marca, categoria } = req.query; 
+
+    if (!vendedorId || isNaN(parseInt(vendedorId))) {
+        return resp.status(400).json({ msg: "error", error: "ID de vendedor inválido o no proporcionado." });
+    }
+
+    try {
+        // Consulta para obtener las ventas del vendedor, incluyendo detalles del auto y del comprador
+        const query = `
+            SELECT 
+                v.id_venta,
+                a.Marca_auto,
+                a.Modelo_Auto,
+                a.Año_auto AS Anio_auto, -- Alias para consistencia, asumiendo que Año_auto es YEAR
+                u_comprador.Nombre AS nombre_comprador,
+                u_comprador.Apellidos AS apellidos_comprador,
+                v.fecha_venta,
+                v.Precio_pagado,
+                v.metodo_pago_venta -- 0 para Débito, 1 para Crédito (según tabla_venta)
+            FROM 
+                tabla_venta v
+            JOIN 
+                tabla_auto a ON v.id_auto_venta = a.id_auto
+            JOIN 
+                tabla_usuario u_comprador ON v.id_usuario_comprador = u_comprador.id_usuario
+            WHERE 
+                v.id_usuario_vendedor = ?
+            ORDER BY 
+                v.fecha_venta DESC;
+        `;
+        // TODO: Aquí podrías añadir cláusulas WHERE adicionales si implementas filtros por fecha, marca, etc.
+
+        const [ventas] = await dbPool.query(query, [vendedorId]);
+        
+        const ventasConNombreCompleto = ventas.map(venta => ({
+            ...venta,
+            nombre_comprador: `${venta.nombre_comprador || ''} ${venta.apellidos_comprador || ''}`.trim()
+        }));
+
+        resp.json(ventasConNombreCompleto);
+
+    } catch (error) {
+        console.error(`Error al obtener ventas para el vendedor ${vendedorId}:`, error);
+        resp.status(500).json({ msg: "error", error: "Error interno del servidor al obtener el reporte de ventas." });
+    }
+});
+
+app.get("/api/comprador/:compradorId/compras", async (req, resp) => {
+    const { compradorId } = req.params;
+
+    if (!compradorId || isNaN(parseInt(compradorId))) {
+        return resp.status(400).json({ msg: "error", error: "ID de comprador inválido o no proporcionado." });
+    }
+
+    try {
+        const query = `
+            SELECT 
+                v.id_venta,
+                a.Marca_auto,
+                a.Modelo_Auto,
+                a.Año_auto AS Anio_auto, -- Alias para consistencia
+                u_vendedor.Nombre AS nombre_vendedor_nombre,
+                u_vendedor.Apellidos AS nombre_vendedor_apellidos,
+                v.fecha_venta,
+                v.Precio_pagado,
+                v.metodo_pago_venta 
+            FROM 
+                tabla_venta v
+            JOIN 
+                tabla_auto a ON v.id_auto_venta = a.id_auto
+            JOIN 
+                tabla_usuario u_vendedor ON v.id_usuario_vendedor = u_vendedor.id_usuario
+            WHERE 
+                v.id_usuario_comprador = ?
+            ORDER BY 
+                v.fecha_venta DESC;
+        `;
+        
+        const [compras] = await dbPool.query(query, [compradorId]);
+
+        const comprasConNombreVendedor = compras.map(compra => ({
+            ...compra,
+            nombre_vendedor: `${compra.nombre_vendedor_nombre || ''} ${compra.nombre_vendedor_apellidos || ''}`.trim()
+        }));
+
+        resp.json(comprasConNombreVendedor);
+
+    } catch (error) {
+        console.error(`Error al obtener compras para el comprador ${compradorId}:`, error);
+        resp.status(500).json({ msg: "error", error: "Error interno del servidor al obtener el historial de compras." });
+    }
+});
 
 
 

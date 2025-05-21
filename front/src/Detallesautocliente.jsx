@@ -179,6 +179,55 @@ function DetallesAutoCliente() {
     }
 
     const esVendedorDelAuto = loggedInUser && autoDetalles && loggedInUser.idUsuario === autoDetalles.id_vendedor_usuario;
+    const esUsuarioVendedor = loggedInUser && loggedInUser.tipoUsuario === 2;
+
+    let actionButtons = null;
+
+if (loggedInUser) {
+    if (esVendedorDelAuto) {
+        // Opción 2: El usuario es el vendedor que publicó el auto
+        actionButtons = (
+            <button
+                className="w-full bg-green-600 text-white px-4 py-2.5 rounded-lg text-md md:text-lg hover:bg-green-700 transition shadow"
+                onClick={handleEditarPublicacion}
+            >
+                Modificar Publicación
+            </button>
+        );
+    } else if (loggedInUser.tipoUsuario === 1) {
+        // Opción 1: El usuario es un Comprador (Tipo_usuario = 1)
+        actionButtons = (
+            <>
+                <button
+                    className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg text-md md:text-lg hover:bg-blue-700 transition shadow"
+                    onClick={handleComprarClick}
+                >
+                    Comprar
+                </button>
+                <button
+                    className="w-full bg-gray-600 text-white px-4 py-2.5 rounded-lg text-md md:text-lg hover:bg-gray-700 transition shadow"
+                    onClick={handleDudasClick}
+                >
+                    Contactar al vendedor
+                </button>
+            </>
+        );
+    }
+    // Opción 3: Si es vendedor NO PROPIETARIO, actionButtons permanece null y no se renderiza nada.
+    // Si no está logueado, actionButtons permanece null.
+} else {
+    // Usuario no logueado: Podrías mostrar un botón para iniciar sesión o solo "Contactar"
+    // Por ahora, para simplificar y dado que Comprar/Dudas ya redirigen si no hay sesión,
+    // podríamos mostrar el botón de "Contactar" que internamente pedirá login.
+     actionButtons = (
+        <button
+            className="w-full bg-gray-600 text-white px-4 py-2.5 rounded-lg text-md md:text-lg hover:bg-gray-700 transition shadow"
+            onClick={handleDudasClick} // handleDudasClick ya verifica si está logueado
+        >
+            Contactar al vendedor
+        </button>
+    );
+}
 
     return (
         <div className="min-h-screen flex flex-col bg-cover bg-center" style={{ backgroundImage: "url('https://dmn-dallas-news-prod.cdn.arcpublishing.com/resizer/v2/UJGAOWYYINE7RI3C2NK24KCJJ4.JPG?auth=d6132571f413b0a1cb4ec2dbc92e0ce4bbe75c140093dd9fbc646e59df9c18a6&height=1878&quality=80')" }}>
@@ -240,29 +289,7 @@ function DetallesAutoCliente() {
                                     </div>
 
                                     <div className="mt-5 space-y-3">
-                                        {!esVendedorDelAuto ? (
-                                            <>
-                                                <button
-                                                    className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg text-md md:text-lg hover:bg-blue-700 transition shadow"
-                                                    onClick={handleComprarClick}
-                                                >
-                                                    Comprar
-                                                </button>
-                                                <button
-                                                    className="w-full bg-gray-600 text-white px-4 py-2.5 rounded-lg text-md md:text-lg hover:bg-gray-700 transition shadow"
-                                                    onClick={handleDudasClick}
-                                                >
-                                                    Contactar al vendedor
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <button
-                                                className="w-full bg-green-600 text-white px-4 py-2.5 rounded-lg text-md md:text-lg hover:bg-green-700 transition shadow"
-                                                onClick={handleEditarPublicacion}
-                                            >
-                                                Modificar Publicación
-                                            </button>
-                                        )}
+                                        {actionButtons}
                                     </div>
                                 </div>
 
