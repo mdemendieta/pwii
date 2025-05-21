@@ -29,18 +29,18 @@ function App() {
       <Route path='/Landing' element={<Landing/>}></Route>
       <Route path='/PantallaPrincipal' element={<PantallaPrincipal/>}></Route>
       <Route path='/Catalogousuario' element={<Catalogousuario/>}></Route>
-      <Route path='/Catalogovendedor' element={<Catalogovendedor/>}></Route>
+      <Route path='/Catalogovendedor/:vendedorId' element={<Catalogovendedor />} />
       <Route path='/ChatCliente' element={<ChatCliente/>}></Route>
       <Route path='/ChatVendedor' element={<ChatVendedor/>}></Route>
       <Route path='/Reportes' element={<Reportes/>}></Route>
       <Route path='/Perfilcliente' element={<Perfilcliente/>}></Route>
       <Route path='/Perfilvendedor' element={<Perfilvendedor/>}></Route>
-      <Route path='/Detallesautocliente' element={<Detallesautocliente/>}></Route>
+      <Route path='/Detallesautocliente/:autoId' element={<Detallesautocliente />} />
       <Route path='/Detallesautovendedor' element={<Detallesautovendedor/>}></Route>
       <Route path='/Publicarauto' element={<Publicarauto/>}></Route>
       <Route path='/Comprarauto' element={<Comprarauto/>}></Route>
       <Route path='/Resenascliente' element={<Resenascliente/>}></Route>
-      <Route path='/Editarpublicacion' element={<Editarpublicacion/>}></Route>
+      <Route path='/Editarpublicacion/:autoId' element={<Editarpublicacion />} />
         <Route path='/SignUp' element={<Registro/>}></Route>
         <Route path='/Login' element={<Login/>}></Route>
         <Route path='/Imagenes' element={<Imagenes/>}></Route>

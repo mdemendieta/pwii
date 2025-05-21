@@ -38,63 +38,75 @@ function Landing(){
     }
 
     const sendDatos = () => {
-        const frmData= new FormData();
-        frmData.append("user", user);
-        frmData.append("correo", correo);
-        frmData.append("contra", contra);
-        frmData.append("nombre", nombre);
-        frmData.append("apellidos", apellidos);
-        frmData.append("fecha", fecha);
-        frmData.append("rol", rol);
-        frmData.append("genero", genero);
-        frmData.append("imagen", imagen);
-  
-        axios.post(
-            "http://localhost:3001/create",
-            frmData,
-            {
-              headers:{'Content-Type': 'multipart/form-data'}
-            }
-        ).then((respuesta) => {
-            if(respuesta.data.msg === "ok"){
-              nav("/PantallaPrincipal");
-            }
-            
-        }).catch((error) => {  // Definir el argumento 'error'
-            alert("Ocurrió un error: " + error.message);  // Mostrar el mensaje de error
-        });
-    }
+    const frmData = new FormData();
+    frmData.append("user", user);
+    frmData.append("correo", correo);
+    frmData.append("contra", contra);
+    frmData.append("nombre", nombre);
+    frmData.append("apellidos", apellidos);
+    frmData.append("fecha", fecha);
+    frmData.append("rol", rol);
+    frmData.append("genero", genero);
     
-    const login = () =>{
-      axios.post("http://localhost:3001/login",
-          {
-              email: correo,
-              passw: contra
-          }
-      ).then(
-
-(respuesta) => {
-    if (respuesta.data.alert === "Encontrado") {
-        console.log("Usuario recibido:", respuesta.data); // Muestra el objeto completo en consola
-        alert("Usuario encontrado");
-
-        if (respuesta.data.idUsuario) { // Verifica que los datos sean válidos
-            localStorage.setItem("usuario", JSON.stringify(respuesta.data)); // Guarda todo el objeto
-            nav("/PantallaPrincipal"); // Redirige correctamente
-        } else {
-            console.error("Error: idUsuario está undefined y no se puede guardar.");
-        }
+    if (imagen) { // Only append if an image is selected
+        frmData.append("imagen", imagen);
     } else {
-        alert("Usuario no encontrado");
+        // Handle cases where image might be required or provide a default
+        // For now, we'll let the backend handle null 'imagen' if the DB allows
     }
-}
-      ).catch(
-          (error)=>{
-              console.log(error);
-          }
-      )
 
-    };
+    axios.post(
+        "http://localhost:3001/create",
+        frmData,
+        {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        }
+    ).then((respuesta) => {
+        if (respuesta.data.msg === "ok" && respuesta.data.userData) {
+            // Successful registration and user data received for auto-login
+            alert(respuesta.data.message || "Usuario creado con éxito. Iniciando sesión...");
+            localStorage.setItem("usuario", JSON.stringify(respuesta.data.userData)); // Store user data
+            nav("/PantallaPrincipal"); // Navigate to the main screen
+        } else if (respuesta.data.msg === "created_login_failed") {
+            // User created, but auto-login data retrieval failed on backend
+            alert(respuesta.data.message);
+            setIsLogin(true); // Switch to login form so user can log in manually
+        }
+         else {
+            // Handle other errors or unexpected responses from the backend
+            alert(respuesta.data.error || respuesta.data.message || "Error al registrar. Intente de nuevo.");
+        }
+    }).catch((error) => {
+        console.error("Error en sendDatos:", error);
+        let errorMessage = "Ocurrió un error al registrar.";
+        if (error.response && error.response.data && (error.response.data.error || error.response.data.msg)) {
+            errorMessage = error.response.data.error || error.response.data.msg;
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        alert(errorMessage);
+    });
+};
+    
+    const login = () => {
+    axios.post("http://localhost:3001/login", {
+        email: correo,
+        passw: contra
+    }).then((respuesta) => {
+        if (respuesta.data.alert === "Encontrado" && respuesta.data.userData) {
+            console.log("Usuario recibido:", respuesta.data.userData);
+            alert("Usuario encontrado");
+            // Ensure userData is the object to stringify
+            localStorage.setItem("usuario", JSON.stringify(respuesta.data.userData)); 
+            nav("/PantallaPrincipal"); 
+        } else {
+            alert(respuesta.data.error || "Usuario no encontrado o datos incorrectos.");
+        }
+    }).catch((error) => {
+        console.error("Error en login:", error);
+        alert("Ocurrió un error al iniciar sesión.");
+    });
+};
 
   return (
   
